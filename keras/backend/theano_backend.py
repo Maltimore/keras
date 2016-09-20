@@ -3,6 +3,7 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano.tensor.signal import pool
 from theano.tensor.nnet import conv3d2d
+from theano.sandbox.cuda.dnn import dnn_conv3d
 from theano.printing import Print
 try:
     import theano.sparse as th_sparse_module
@@ -1243,10 +1244,13 @@ def conv3d(x, kernel, strides=(1, 1, 1),
         border_mode = 'valid'
 
     border_mode_3d = (border_mode, border_mode, border_mode)
-    conv_out = conv3d2d.conv3d(signals=x.dimshuffle(0, 2, 1, 3, 4),
-                               filters=kernel.dimshuffle(0, 2, 1, 3, 4),
-                               border_mode=border_mode_3d)
-    conv_out = conv_out.dimshuffle(0, 2, 1, 3, 4)
+#    conv_out = conv3d2d.conv3d(signals=x.dimshuffle(0, 2, 1, 3, 4),
+#                               filters=kernel.dimshuffle(0, 2, 1, 3, 4),
+#                               border_mode=border_mode_3d)
+    conv_out = dnn_conv3d(img=x,
+                          kerns=kernel,
+                          border_mode=border_mode)
+#    conv_out = conv_out.dimshuffle(0, 2, 1, 3, 4)
 
     # support strides by manually slicing the output
     if strides != (1, 1, 1):
