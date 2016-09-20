@@ -2,7 +2,6 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano.tensor.signal import pool
-from theano.tensor.nnet.Conv3D import conv3D as theano_conv3d
 from theano.tensor.nnet import conv3d2d
 from theano.sandbox.cuda.dnn import dnn_conv3d
 from theano.sandbox.cuda.blas import GpuCorr3dMM
