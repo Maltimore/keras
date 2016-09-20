@@ -2,8 +2,10 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano.tensor.signal import pool
+from theano.tensor.nnet.Conv3D import conv3D as theano_conv3d
 from theano.tensor.nnet import conv3d2d
 from theano.sandbox.cuda.dnn import dnn_conv3d
+from theano.sandbox.cuda.blas import GpuCorr3dMM
 from theano.printing import Print
 try:
     import theano.sparse as th_sparse_module
@@ -1199,10 +1201,17 @@ def separable_conv2d(x, depthwise_kernel, pointwise_kernel, strides=(1, 1),
 
 def conv3d(x, kernel, strides=(1, 1, 1),
            border_mode='valid', dim_ordering=_IMAGE_DIM_ORDERING,
-           volume_shape=None, filter_shape=None):
+           volume_shape=None, filter_shape=None,
+           conv_algo="GpuCorr3dMM"):
     '''
     Run on cuDNN if available.
     border_mode: string, "same" or "valid".
+    conv_algo: string,
+               "conv3d2d": internally reshapes the data and performs 2d convs
+               "dnn_conv3d": uses CuDNNs 3d convolution
+               "GpuCorr3dM": performs a correlation, not a conolution
+                             (filter not flipped), uses the "Toeplitz"-
+                             matrix (which means it needs a little more memory)
     '''
     if dim_ordering not in {'th', 'tf'}:
         raise Exception('Unknown dim_ordering ' + str(dim_ordering))
@@ -1244,13 +1253,21 @@ def conv3d(x, kernel, strides=(1, 1, 1),
         border_mode = 'valid'
 
     border_mode_3d = (border_mode, border_mode, border_mode)
-#    conv_out = conv3d2d.conv3d(signals=x.dimshuffle(0, 2, 1, 3, 4),
-#                               filters=kernel.dimshuffle(0, 2, 1, 3, 4),
-#                               border_mode=border_mode_3d)
-    conv_out = dnn_conv3d(img=x,
-                          kerns=kernel,
-                          border_mode=border_mode)
-#    conv_out = conv_out.dimshuffle(0, 2, 1, 3, 4)
+    if conv_algo == "conv3d2d":
+        conv_out = conv3d2d.conv3d(signals=x.dimshuffle(0, 2, 1, 3, 4),
+                                   filters=kernel.dimshuffle(0, 2, 1, 3, 4),
+                                   border_mode=border_mode_3d)
+        conv_out = conv_out.dimshuffle(0, 2, 1, 3, 4)
+    elif conv_algo == "dnn_conv3d":
+        conv_out = dnn_conv3d(img=x,
+                              kerns=kernel,
+                              border_mode=border_mode)
+    elif conv_algo == "GpuCorr3dMM":
+        bias = np.zeros((volume_shape[1]))
+        conv_out = GpuCorr3dMM()(x, kernel)
+    else:
+        raise("Unknown algorithm to perform 3d convolution")
+        
 
     # support strides by manually slicing the output
     if strides != (1, 1, 1):
